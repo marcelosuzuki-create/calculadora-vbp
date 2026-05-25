@@ -480,7 +480,7 @@ body { font-family:'DM Sans',system-ui,sans-serif; background:var(--bg); color:v
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1rem">
     <div class="sl-section">
       <div class="sl-row">
-        <label>Engajamento (% que assinam)</label>
+        <label>Engajamento (% que compram VB Premiado)</label>
         <input type="range" min="1" max="100" step="1" value="12" id="sl-eng" oninput="syncFromSlider('sl-eng','ni-eng',v=>v+'%',1,100,1)">
         <input type="number" min="1" max="100" step="1" value="12" id="ni-eng" class="sl-num" oninput="syncFromNum('ni-eng','sl-eng',1,100)">
         <span class="sl-unit">%</span>
@@ -574,15 +574,11 @@ body { font-family:'DM Sans',system-ui,sans-serif; background:var(--bg); color:v
     </div>
   </div>
 
-  <div class="crm-panel" id="crm-panel">
-    <div class="cp-title">Receita CRMBonus <span class="badge badge-info">garantida</span></div>
-    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
-      <div><div style="font-size:10px;color:var(--blue);margin-bottom:3px">MRR variável (líquido)</div><div style="font-size:18px;font-weight:500;color:var(--blue)" id="crm-mrr">—</div><div style="font-size:10px;color:var(--text3)">por número × clientes</div></div>
-      <div><div style="font-size:10px;color:var(--blue);margin-bottom:3px">Fee fixo / mês</div><div style="font-size:18px;font-weight:500;color:var(--blue)" id="crm-fee">—</div></div>
-      <div><div style="font-size:10px;color:var(--blue);margin-bottom:3px">Receita total / mês</div><div style="font-size:18px;font-weight:500;color:var(--blue)" id="crm-total">—</div></div>
-      <div><div style="font-size:10px;color:var(--blue);margin-bottom:3px">ARR CRMBonus</div><div style="font-size:18px;font-weight:500;color:var(--blue)" id="crm-arr">—</div></div>
-    </div>
-  </div>
+  <!-- IDs fantasmas para o JS não quebrar -->
+  <span id="crm-mrr" style="display:none"></span>
+  <span id="crm-fee" style="display:none"></span>
+  <span id="crm-total" style="display:none"></span>
+  <span id="crm-arr" style="display:none"></span>
 
   <div class="grid-2">
     <div class="card" id="detail-loja"></div>
@@ -611,6 +607,35 @@ body { font-family:'DM Sans',system-ui,sans-serif; background:var(--bg); color:v
       <span class="li"><span class="ld" style="background:#FCEBEB"></span>Negativo</span>
     </div>
     <p class="footnote">Clique em qualquer célula para aplicar os valores ao simulador.</p>
+  </div>
+
+  <!-- P&L CRMBonus — última seção, só visível quando Sorteio=Não -->
+  <div id="crm-pl-section" style="display:none;margin-top:1.5rem">
+    <hr class="divider">
+    <p class="slbl">P&amp;L CRMBonus</p>
+    <div class="crm-panel" style="background:#FEF3E2;border-color:rgba(184,112,16,0.25)">
+      <div class="cp-title" style="color:var(--amber)">P&amp;L CRMBonus <span class="badge" style="background:#FAEEDA;color:var(--amber);border:.5px solid #EFC97E">modo revenue</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+        <div>
+          <div style="font-size:10px;color:var(--amber);margin-bottom:3px">Receita total / mês</div>
+          <div style="font-size:18px;font-weight:500;color:var(--amber)" id="crm-total-pl">—</div>
+          <div style="font-size:10px;color:var(--text3)">MRR variável + Fee fixo</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--amber);margin-bottom:3px">Custo Sorteio / mês</div>
+          <div style="font-size:18px;font-weight:500;color:var(--red-dk)" id="crm-custo-sorteio">—</div>
+          <div style="font-size:10px;color:var(--text3)">prêmio pago pela CRMBonus</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--amber);margin-bottom:3px">Resultado líquido / mês</div>
+          <div class="cf-num-lg" id="crm-liq">—</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--amber);margin-bottom:3px">ARR líquido CRMBonus</div>
+          <div class="cf-num-lg" id="crm-arr-liq">—</div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div></div>
@@ -1264,13 +1289,19 @@ function calcD(eng, resg, tick, marg, custo, p, sorteio, custoSorteio) {
   const recTotalVar = vendasInc + recAssinVar;
 
   const cVendas   = sorteio ? efet * (tick * (marg/100) < 0 ? 0 : (1 - marg/100) * tick) : 0;
-  const cPic      = sorteio ? efet * custo : custoSorteio; // custoSorteio = valor total do prêmio/mês
-  const lucroVar  = recTotalVar * (sorteio ? marg/100 : 1) - cPic - p.feeCRM - p.setup/12;
+  const cPic      = sorteio ? efet * custo : 0; // quando sorteio=false, custo prêmio é da CRMBonus, não do varejista
+  // DRE Varejista: sorteio=false → recAssinVar - feeCRM - setup/12
+  const lucroVar  = sorteio
+    ? recTotalVar * (marg/100) - cPic - p.feeCRM - p.setup/12
+    : recAssinVar - p.feeCRM - p.setup/12;
 
-  const crmMRR = p.crmPorAssin * assin;
-  const crmTot = crmMRR + p.feeCRM;
+  // P&L CRMBonus
+  const crmMRR     = p.crmPorAssin * assin;
+  const crmTot     = crmMRR + p.feeCRM;
+  const crmCusto   = sorteio ? 0 : custoSorteio; // prêmio só entra no P&L CRM quando sorteio=Não
+  const crmLiq     = crmTot - crmCusto;
 
-  return { assin, disp, efet, vendasInc, recAssinVar, recTotalVar, cPic, lucroVar, crmMRR, crmTot, lojas: p.lojas };
+  return { assin, disp, efet, vendasInc, recAssinVar, recTotalVar, cPic, lucroVar, crmMRR, crmTot, crmCusto, crmLiq, lojas: p.lojas };
 }
 
 function calcSim() {
@@ -1307,11 +1338,22 @@ function calcSim() {
   document.getElementById('cf-r2').textContent  = p.piccoli+' número(s) da sorte / cliente';
   document.getElementById('cf-r3').textContent  = resg.toFixed(0)+'% efetivação';
 
-  // CRM panel
-  document.getElementById('crm-mrr').textContent  = fmt(d.crmMRR);
-  document.getElementById('crm-fee').textContent  = fmt(p.feeCRM);
-  document.getElementById('crm-total').textContent= fmt(d.crmTot);
-  document.getElementById('crm-arr').textContent  = fmt(d.crmTot*12);
+  // CRM panel (P&L CRMBonus)
+  document.getElementById('crm-mrr').textContent    = fmt(d.crmMRR);
+  document.getElementById('crm-fee').textContent    = fmt(p.feeCRM);
+  document.getElementById('crm-total').textContent  = fmt(d.crmTot);
+  const crmTotalPlEl = document.getElementById('crm-total-pl'); if(crmTotalPlEl) crmTotalPlEl.textContent = fmt(d.crmTot);
+  document.getElementById('crm-arr').textContent    = fmt(d.crmTot*12);
+  // P&L líquido CRMBonus (só visível quando sorteio=Não)
+  const plCRMEl = document.getElementById('crm-pl-section');
+  if (plCRMEl) {
+    plCRMEl.style.display = sorteioAtivo ? 'none' : '';
+    document.getElementById('crm-custo-sorteio').textContent = fmt(d.crmCusto);
+    document.getElementById('crm-liq').textContent  = fmt(d.crmLiq);
+    document.getElementById('crm-liq').className    = 'cf-num-lg ' + clsOf(d.crmLiq);
+    document.getElementById('crm-arr-liq').textContent = fmt(d.crmLiq * 12);
+    document.getElementById('crm-arr-liq').className   = 'cf-num-lg ' + clsOf(d.crmLiq);
+  }
 
   // Detail cards
   const dLoja = document.getElementById('detail-loja');
@@ -1320,7 +1362,7 @@ function calcSim() {
     brow('Receita incremental por unidade', fmt(d.recTotalVar/Math.max(1,p.lojas))) +
     (sorteioAtivo ? brow('  → Vendas incrementais / unidade', fmt(d.vendasInc/Math.max(1,p.lojas))) : '') +
     brow('  → Revenue assinatura / unidade', fmt(d.recAssinVar/Math.max(1,p.lojas))) +
-    brow('Custo produto ou sorteio / unidade', '− '+fmt(d.cPic/Math.max(1,p.lojas))) +
+    (sorteioAtivo ? brow('Custo produto / unidade', '− '+fmt(d.cPic/Math.max(1,p.lojas))) : '') +
     brow('Fee fixo rateado / unidade', p.feeCRM > 0 ? '− '+fmt(p.feeCRM/Math.max(1,p.lojas)) : 'R$ 0') +
     brow('Setup rateado (÷12) / unidade', p.setup > 0 ? '− '+fmt(p.setup/12/Math.max(1,p.lojas)) : 'R$ 0') +
     browB('Resultado líquido / unidade / mês', fmt(liqMes/Math.max(1,p.lojas)), clsOf(liqMes));
@@ -1328,7 +1370,7 @@ function calcSim() {
     brow('Receita incremental total', fmt(d.recTotalVar)) +
     (sorteioAtivo ? brow('  → Vendas incrementais', fmt(d.vendasInc)) : '') +
     brow('  → Revenue assinaturas', fmt(d.recAssinVar)) +
-    brow('Custo produto ou sorteio', '− '+fmt(d.cPic)) +
+    (sorteioAtivo ? brow('Custo produto / sorteio', '− '+fmt(d.cPic)) : '') +
     brow('Fee fixo mensal', p.feeCRM > 0 ? '− '+fmt(p.feeCRM) : 'R$ 0') +
     brow('Setup / 12', p.setup > 0 ? '− '+fmt(p.setup/12) : 'R$ 0') +
     browB('Resultado líquido / mês', fmt(liqMes), clsOf(liqMes)) +
